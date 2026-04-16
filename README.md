@@ -13,8 +13,6 @@ A high-performance, sub-30ms P99 behavioral fraud detection engine built with a 
 
 ## 🏗️ Architecture
 
-![MCP Architecture](./Fraud%20Detection/docs/assets/mcp_architecture.png)
-
 ```mermaid
 graph TD
     subgraph "Act Path (Hot)"
