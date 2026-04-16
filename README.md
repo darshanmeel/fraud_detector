@@ -36,6 +36,71 @@ graph TD
     end
 ```
 
+## 🔄 Transaction Lifecycle Deep-Dive
+
+This diagram shows exactly what happens to a single transaction as it flows through the micro-agents.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant S as 🛠️ Simulator
+    participant FW as ✍️ Feature Writer
+    participant FP as 🧠 Fraud Processor
+    participant FS as 🍽️ Feast/Redis
+    participant EC as 🧐 Explain Consumer
+    participant DM as 📈 Drift Monitor
+
+    Note over S: [Input]: Raw TX Parameters<br/>[Trigger]: simulate.py -> produce_event()
+    S->>FP: 1. Input: TransactionEvent (JSON)
+    S->>FW: 1. Input: TransactionEvent (JSON)
+    S->>DM: 1. Input: TransactionEvent (JSON)
+
+    rect rgb(240, 240, 240)
+    Note over FW: [Internal]: account_tx_counts[id] += 1
+    FW->>FS: 2. Output: store.write_to_online_store()
+    end
+
+    rect rgb(230, 240, 255)
+    Note over FP: [Internal]: hydrate -> predict -> route
+    FP->>FS: 3. Input: account_id
+    FS-->>FP: 4. Output: txn_count_1m (e.g. 15)
+    
+    Note over FP: Logic: score = model.predict(X)
+    
+    alt score < 0.3 (ALLOW)
+        FP->>S: 5. Output: decision.allow
+    else 0.3 < score < 0.7 (REVIEW)
+        FP->>S: 5. Output: decision.review
+        FP-->>EC: 6. Input: Decision + Features
+    else score > 0.7 (BLOCK)
+        FP->>S: 5. Output: decision.block
+        FP-->>EC: 6. Input: Decision + Features
+    end
+    end
+
+    rect rgb(255, 245, 230)
+    Note over EC: [Internal]: model.explain() (SHAP)
+    EC->>EC: 7. Output: Write MinIO audit/{id}.json
+    end
+
+    rect rgb(245, 255, 245)
+    Note over DM: [Internal]: rolling_avg['total'] update
+    DM->>DM: 8. Trigger: warning if avg > $100
+    end
+```
+
+### 🔍 Inside the Services
+
+| Service | 📥 Input | ⚙️ Internal Logic (Code Triggered) | 📤 Output |
+| :--- | :--- | :--- | :--- |
+| **Simulator** | CLI Flags | `generate_tx()` -> `producer.send()` | `TransactionEvent` |
+| **Feature Writer** | `TransactionEvent` | `account_tx_counts[id] += 1` (RocksDB) | `feast.push()` to Redis |
+| **Fraud Processor** | `TransactionEvent` | `champion.predict(features)` (ONNX Runtime) | `DecisionEnvelope` |
+| **Explain Consumer**| `DecisionEnvelope` | `model.explain(features)` (SHAP Math) | `.json` Audit Log in MinIO |
+| **Drift Monitor** | `TransactionEvent` | `new_avg = (total + amount) / count` | Warning Log / OTel Metric |
+
+---
+
 ## 🛠️ Tech Stack
 
 - **Message Bus:** [Redpanda](https://redpanda.com/) (Kafka-compatible)
