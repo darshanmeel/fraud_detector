@@ -1,0 +1,25 @@
+{
+  "type": "record",
+  "name": "FeatureVector",
+  "namespace": "fraud.detection",
+  "fields": [
+    {"name": "entity_id", "type": "string"},
+    {"name": "schema_version", "type": "string"},
+    {"name": "feature_timestamp", "type": "long"},
+    {"name": "txn_count_1m", "type": "double"},
+    {"name": "txn_count_5m", "type": "double"},
+    {"name": "txn_count_15m", "type": "double"},
+    {"name": "txn_count_1h", "type": "double"},
+    {"name": "txn_count_24h", "type": "double"},
+    {"name": "spend_sum_1m", "type": "double"},
+    {"name": "spend_sum_5m", "type": "double"},
+    {"name": "spend_sum_1h", "type": "double"},
+    {"name": "spend_avg_24h", "type": "double"},
+    {"name": "distinct_merchants_1h", "type": "int"},
+    {"name": "distinct_countries_24h", "type": "int"},
+    {"name": "distinct_devices_24h", "type": "int"},
+    {"name": "session_txn_count", "type": "int"},
+    {"name": "session_duration_s", "type": "double"},
+    {"name": "low_confidence", "type": "boolean"}
+  ]
+}

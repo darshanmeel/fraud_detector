@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+redis
+confluent-kafka
+feast[redis]
+pandas

@@ -1,0 +1,424 @@
+version: '3.8'
+
+networks:
+  act-net:
+    driver: bridge
+  explain-net:
+    driver: bridge
+  obs-net:
+    driver: bridge
+  mgmt-net:
+    driver: bridge
+
+services:
+  # --- CORE PROFILE ---
+
+  redis:
+    image: redis:${REDIS_VERSION}
+    container_name: fraud-redis
+    profiles: [core]
+    ports:
+      - "6379:6379"
+    networks:
+      - act-net
+      - obs-net
+      - explain-net
+    volumes:
+      - redis-data:/data
+      - ./config/redis/redis.conf:/usr/local/etc/redis/redis.conf
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+
+  redpanda:
+    image: redpandadata/redpanda:${REDPANDA_VERSION}
+    container_name: fraud-redpanda
+    profiles: [core]
+    ports:
+      - "9092:9092"
+      - "9644:9644"
+      - "8081:8081"
+      - "8080:8080"
+    networks:
+      - act-net
+      - explain-net
+    command:
+      - redpanda start
+      - --smp 1
+      - --memory 1G
+      - --reserve-memory 0M
+      - --overprovisioned
+      - --node-id 0
+      - --check=false
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2.0'
+
+  init-redpanda:
+    image: redpandadata/redpanda:${REDPANDA_VERSION}
+    container_name: fraud-init-redpanda
+    profiles: [core]
+    networks:
+      - act-net
+    volumes:
+      - ./config/redpanda/topics.sh:/usr/local/bin/topics.sh
+    entrypoint: ["/bin/bash", "/usr/local/bin/topics.sh"]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+  minio:
+    image: minio/minio:${MINIO_VERSION}
+    container_name: fraud-minio
+    profiles: [core]
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - explain-net
+      - mgmt-net
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - minio-data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+
+  init-minio:
+    image: minio/mc:latest
+    container_name: fraud-init-minio
+    profiles: [core]
+    networks:
+      - explain-net
+      - mgmt-net
+    depends_on:
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./config/minio/bootstrap.sh:/usr/local/bin/bootstrap.sh
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    entrypoint: ["/bin/sh", "/usr/local/bin/bootstrap.sh"]
+
+  feast:
+    build:
+      context: .
+      dockerfile: services/feast/Dockerfile
+    container_name: fraud-feast
+    profiles: [core]
+    ports:
+      - "6566:6566"
+    networks:
+      - act-net
+      - obs-net
+      - explain-net
+    volumes:
+      - ./config/feast:/app
+    environment:
+      FEAST_USAGE: "True"
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      FEAST_S3_ENDPOINT_URL: "http://minio:9000"
+    command: ["feast", "ui", "--port", "6566", "--host", "0.0.0.0"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: '0.5'
+
+  fraud-processor:
+    build:
+      context: .
+      dockerfile: services/fraud-processor/Dockerfile
+    container_name: fraud-processor
+    profiles: [core]
+    networks:
+      - act-net
+      - explain-net
+      - obs-net
+    environment:
+      KAFKA_BROKER: "kafka://redpanda:29092"
+      FEAST_REPO_PATH: "/app/feast_repo"
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      FEAST_S3_ENDPOINT_URL: "http://minio:9000"
+      OTEL_ENDPOINT: "otel-collector:4317"
+    volumes:
+      - ./config/feast:/app/feast_repo
+      - ./models:/models
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      feast:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: '2.0'
+
+  feature-writer:
+    build:
+      context: .
+      dockerfile: services/feature-writer/Dockerfile
+    container_name: fraud-feature-writer
+    profiles: [core]
+    networks:
+      - act-net
+      - obs-net
+    environment:
+      KAFKA_BROKER: "kafka://redpanda:29092"
+      FEAST_REPO_PATH: "/app/feast_repo"
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      FEAST_S3_ENDPOINT_URL: "http://minio:9000"
+    volumes:
+      - ./config/feast:/app/feast_repo
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+
+  explain-consumer:
+    build:
+      context: .
+      dockerfile: services/explain-consumer/Dockerfile
+    container_name: fraud-explain-consumer
+    profiles: [core]
+    networks:
+      - explain-net
+      - obs-net
+    environment:
+      KAFKA_BROKER: "kafka://redpanda:29092"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+
+  drift-monitor:
+    build:
+      context: .
+      dockerfile: services/drift-monitor/Dockerfile
+    container_name: fraud-drift-monitor
+    profiles: [core]
+    networks:
+      - explain-net
+      - obs-net
+    environment:
+      KAFKA_BROKER: "kafka://redpanda:29092"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+
+  # --- OBSERVABILITY PROFILE ---
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.99.0
+    container_name: fraud-otel-collector
+    profiles: [obs]
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./config/otel/collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    networks:
+      - act-net
+      - explain-net
+      - obs-net
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: '0.5'
+
+  signoz:
+    image: signoz/signoz:latest
+    container_name: fraud-signoz
+    profiles: [obs]
+    ports:
+      - "3301:3301"
+    networks:
+      - obs-net
+    volumes:
+      - signoz-data:/var/lib/signoz
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2.0'
+
+  # --- MANAGEMENT PROFILE ---
+
+  postgres:
+    image: postgres:${POSTGRES_VERSION}
+    container_name: fraud-postgres
+    profiles: [mgmt]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    networks:
+      - mgmt-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:${MLFLOW_VERSION}
+    container_name: fraud-mlflow
+    profiles: [mgmt]
+    ports:
+      - "5000:5000"
+    networks:
+      - mgmt-net
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      MLFLOW_S3_ENDPOINT_URL: "http://minio:9000"
+      MLFLOW_BACKEND_STORE_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+
+  mgmt-api:
+    build: 
+      context: ./services/mgmt-api
+    container_name: fraud-mgmt-api
+    profiles: [mgmt]
+    environment:
+      - KAFKA_BROKER=redpanda:29092
+      - REDIS_HOST=redis
+      - FEAST_REPO_PATH=/app/config/feast
+    volumes:
+      - ./config/feast:/app/config/feast
+    ports:
+      - "8000:8000"
+    networks:
+      - act-net
+      - mgmt-net
+    depends_on:
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: '0.5'
+
+  airflow-webserver:
+    image: apache/airflow:${AIRFLOW_VERSION}
+    container_name: fraud-airflow-webserver
+    profiles: [mgmt]
+    ports:
+      - "8082:8080"
+    networks:
+      - mgmt-net
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: '1.0'
+
+  airflow-scheduler:
+    image: apache/airflow:${AIRFLOW_VERSION}
+    container_name: fraud-airflow-scheduler
+    profiles: [mgmt]
+    networks:
+      - mgmt-net
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: '1.0'
+
+volumes:
+  redis-data:
+  redpanda-data:
+  minio-data:
+  signoz-data:
+  postgres-data:

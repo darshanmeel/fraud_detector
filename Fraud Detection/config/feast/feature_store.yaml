@@ -1,0 +1,8 @@
+project: fraud_detection
+registry: s3://fraud-features-offline/feast-registry.db
+provider: local
+online_store:
+  type: redis
+  connection_string: "fraud-redis:6379,db=0"
+offline_store:
+  type: file

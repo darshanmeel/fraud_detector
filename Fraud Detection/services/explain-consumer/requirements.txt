@@ -1,0 +1,5 @@
+faust
+pyiceberg[pyarrow]
+s3fs
+thrift-py3
+boto3

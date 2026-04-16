@@ -1,0 +1,23 @@
+{
+  "type": "record",
+  "name": "DecisionEnvelope",
+  "namespace": "fraud.detection",
+  "fields": [
+    {"name": "transaction_id", "type": "string"},
+    {"name": "source_correlation_id", "type": "string"},
+    {"name": "decision", "type": {"type": "enum", "name": "DecisionType", "symbols": ["ALLOW", "REVIEW", "BLOCK", "DEGRADED_BLOCK"]}},
+    {"name": "risk_score", "type": "double"},
+    {"name": "confidence_lower", "type": "double"},
+    {"name": "confidence_upper", "type": "double"},
+    {"name": "model_version", "type": "string"},
+    {"name": "feature_schema_version", "type": "string"},
+    {"name": "processing_ts", "type": "long"},
+    {"name": "latency_ingestion_us", "type": "long"},
+    {"name": "latency_feature_us", "type": "long"},
+    {"name": "latency_inference_us", "type": "long"},
+    {"name": "latency_emission_us", "type": "long"},
+    {"name": "latency_total_us", "type": "long"},
+    {"name": "low_confidence", "type": "boolean"},
+    {"name": "flags", "type": {"type": "array", "items": "string"}}
+  ]
+}

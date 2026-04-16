@@ -1,0 +1,20 @@
+{
+  "type": "record",
+  "name": "TransactionEvent",
+  "namespace": "fraud.detection",
+  "fields": [
+    {"name": "transaction_id", "type": "string"},
+    {"name": "source_system", "type": "string"},
+    {"name": "account_id", "type": "string"},
+    {"name": "device_id", "type": ["null", "string"], "default": null},
+    {"name": "ip_address", "type": ["null", "string"], "default": null},
+    {"name": "merchant_id", "type": "string"},
+    {"name": "merchant_category", "type": "string"},
+    {"name": "amount_cents", "type": "long"},
+    {"name": "currency", "type": "string"},
+    {"name": "country_code", "type": "string"},
+    {"name": "event_timestamp", "type": "long"},
+    {"name": "ingestion_timestamp", "type": "long"},
+    {"name": "source_system_hash", "type": "string"}
+  ]
+}

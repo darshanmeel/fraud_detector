@@ -1,0 +1,7 @@
+faust-streaming
+aiokafka<0.9.0
+kafka-python-ng
+feast[redis,aws]
+boto3
+pyarrow
+pandas
