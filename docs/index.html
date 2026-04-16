@@ -29,75 +29,71 @@
         </div>
     </nav>
 
-    <main class="max-w-7xl mx-auto p-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <!-- Live Architecture Diagram -->
-        <div class="lg:col-span-2 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></span>
-                System Architecture Flow
-            </h2>
-            <div id="diagram" class="mermaid flex justify-center">
-                graph LR
-                    U[👤 User] -->|1| B[📨 Redpanda]
-                    B -->|2| P[🧠 Processor]
-                    P -->|3| F[(🍽️ Feast)]
-                    F -->|4| P
-                    P -->|5| D{Decision}
-                    D -->|ALLOW| A[✅ User]
-                    D -->|BLOCK| R[🛑 Blocked]
-                    D -->|REVIEW| M[🔍 Manual]
-                    
-                    style U stroke:#333,stroke-width:2px
-                    style B stroke:#333,stroke-width:2px
-                    style P stroke:#333,stroke-width:2px
-                    style F stroke:#333,stroke-width:2px
-                    style D stroke:#333,stroke-width:2px
-                    style A stroke:#10b981,stroke-width:2px
-                    style R stroke:#ef4444,stroke-width:2px
-                    style M stroke:#f59e0b,stroke-width:2px
-            </div>
-        </div>
+    <main class="max-w-7xl mx-auto p-6 flex flex-col gap-6">
+        <!-- Top Row: Diagram and Table -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Live Architecture Diagram -->
+            <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <span class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></span>
+                    Interactive Flow
+                </h2>
+                <div id="diagram" class="mermaid flex justify-center min-h-[300px]">
+                    graph LR
+                        USER((👤 User)) -->|1. Event| BUS{📨 Bus}
+                        BUS -->|2. Process| BRAIN[🧠 Processor]
+                        BRAIN <-->|3. Features| KITCHEN[(🍽️ Feast)]
+                        BRAIN -->|4. Decision| JUDGE{⚖️ Decision}
+                        JUDGE -->|ALLOW| OK[✅ Allow]
+                        JUDGE -->|BLOCK| NO[🛑 Block]
+                        JUDGE -->|REVIEW| QM[🔍 Review]
 
-        <!-- System Logs -->
-        <div class="flex flex-col gap-6">
-            <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex-1 flex flex-col">
-                <h2 class="text-lg font-semibold mb-4">📜 Real-Time Logs</h2>
-                <div id="log-container" class="terminal p-4 rounded-lg flex-1 overflow-y-auto text-xs min-h-[400px] max-h-[600px]">
-                    <div class="log-entry">Waiting for transactions...</div>
+                        classDef active stroke:#4ade80,stroke-width:4px,fill:#f0fdf4;
                 </div>
             </div>
 
-            <!-- Stats -->
-            <div class="grid grid-cols-2 gap-4">
+            <!-- Transaction History Table (Moved Up) -->
+            <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                <h2 class="text-lg font-semibold mb-4 flex items-center justify-between">
+                    📊 Recent Decisions
+                    <span class="text-xs font-normal text-gray-500">Last 10 transactions</span>
+                </h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-gray-50 text-gray-600 uppercase">
+                            <tr>
+                                <th class="px-3 py-2">ID</th>
+                                <th class="px-3 py-2">Amount</th>
+                                <th class="px-3 py-2">Result</th>
+                                <th class="px-3 py-2">Logic</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-body" class="divide-y divide-gray-100">
+                            <!-- History rows go here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Row: Logs and Stats -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                <h2 class="text-lg font-semibold mb-4">📜 System Logs (Developer View)</h2>
+                <div id="log-container" class="terminal p-4 rounded-lg overflow-y-auto text-[10px] h-[200px]">
+                    <div class="log-entry">System ready. Waiting for user input...</div>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-4">
                 <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm text-center">
-                    <p class="text-gray-500 text-xs">Blocked</p>
+                    <p class="text-gray-500 text-xs">Blocked Transactions</p>
                     <p id="stat-blocked" class="text-2xl font-bold text-red-500">0</p>
                 </div>
                 <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm text-center">
-                    <p class="text-gray-500 text-xs">P99 Latency</p>
+                    <p class="text-gray-500 text-xs">P99 Inference Latency</p>
                     <p id="stat-latency" class="text-2xl font-bold text-indigo-500">0ms</p>
                 </div>
-            </div>
-        </div>
-
-        <!-- Transaction History Table -->
-        <div class="lg:col-span-3 bg-white p-6 rounded-xl border border-gray-200 shadow-sm mt-8">
-            <h2 class="text-lg font-semibold mb-4">📊 Transaction History</h2>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm">
-                    <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
-                        <tr>
-                            <th class="px-4 py-3">ID</th>
-                            <th class="px-4 py-3">Amount</th>
-                            <th class="px-4 py-3">User Action</th>
-                            <th class="px-4 py-3">Decision</th>
-                            <th class="px-4 py-3">Reason / Logic</th>
-                        </tr>
-                    </thead>
-                    <tbody id="history-body" class="divide-y divide-gray-100">
-                        <!-- History rows go here -->
-                    </tbody>
-                </table>
             </div>
         </div>
     </main>

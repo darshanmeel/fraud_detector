@@ -1,4 +1,4 @@
-mermaid.initialize({ startOnLoad: true });
+mermaid.initialize({ startOnLoad: true, flowchart: { useMaxWidth: true, htmlLabels: true } });
 
 let blockedCount = 0;
 const logContainer = document.getElementById('log-container');
@@ -18,123 +18,114 @@ function addLog(message, type = 'normal') {
     }
 }
 
-function addHistoryRow(id, amount, action, decision, reason) {
+function addHistoryRow(id, amount, decision, reason) {
     const row = document.createElement('tr');
-    const decisionColor = decision === 'BLOCK' ? 'text-red-600 font-semibold' : decision === 'REVIEW' ? 'text-yellow-600 font-semibold' : 'text-green-600 font-semibold';
+    row.className = 'hover:bg-gray-50 transition-colors';
+    const decisionBadge = decision === 'BLOCK' 
+        ? '<span class="px-2 py-1 bg-red-100 text-red-700 rounded-full font-semibold">BLOCK</span>' 
+        : decision === 'REVIEW' 
+        ? '<span class="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full font-semibold">REVIEW</span>' 
+        : '<span class="px-2 py-1 bg-green-100 text-green-700 rounded-full font-semibold">ALLOW</span>';
     
     row.innerHTML = `
-        <td class="px-4 py-3 font-mono text-xs text-gray-500">${id}</td>
-        <td class="px-4 py-3">$${(amount/100).toFixed(2)}</td>
-        <td class="px-4 py-3">${action}</td>
-        <td class="px-4 py-3 ${decisionColor}">${decision}</td>
-        <td class="px-4 py-3 text-gray-600">${reason}</td>
+        <td class="px-3 py-3 font-mono text-[10px] text-gray-400">${id}</td>
+        <td class="px-3 py-3 font-medium text-gray-700">€${(amount/100).toFixed(2)}</td>
+        <td class="px-3 py-3">${decisionBadge}</td>
+        <td class="px-3 py-3 text-gray-500 italic">${reason}</td>
     `;
     historyBody.prepend(row);
+    if (historyBody.children.length > 10) {
+        historyBody.removeChild(historyBody.lastChild);
+    }
 }
 
 async function triggerScenario(type) {
-    let amount = 5000; // $50
+    let amount = 5000; // €50
     let velocity = 1;
     let decision = 'ALLOW';
     let risk = 0.1;
-    let action = "Bought Coffee";
     let reason = "Normal behavioral pattern.";
     
     if (type === 'velocity') {
         velocity = 21;
         decision = 'BLOCK';
         risk = 0.95;
-        action = "Scripted transactions";
-        reason = "User had 20 transactions in 1 minute; 21st triggered velocity block.";
+        reason = "Velocity Alert: 21 transactions in 1 minute detected.";
     } else if (type === 'spike') {
-        amount = 500000; // $5000
+        amount = 500000; // €5000
         decision = 'REVIEW';
         risk = 0.65;
-        action = "Bought Rolex";
-        reason = "Unusually large amount spike for this account profile.";
+        reason = "Amount Spike: Transaction exceeds profile threshold.";
     }
 
-    const txId = Math.random().toString(36).substring(7);
+    const txId = Math.random().toString(36).substring(7).toUpperCase();
     
-    // Step 1: User -> Redpanda
-    addLog(`<b>Transaction Created:</b> ID=${txId}, User Action="${action}"`);
-    animateNode('U');
+    // Step 1: User -> Bus
+    addLog(`<b>New Event:</b> ID=${txId}, User trigger transaction...`);
+    highlightNode('USER');
     await sleep(600);
     
-    // Step 2: Redpanda -> Processor
-    animateNode('B');
+    // Step 2: Bus -> Processor
+    highlightNode('BUS');
     await sleep(600);
     
     // Step 3: Processor -> Feast
-    addLog(`<b>Hydrating Features:</b> txn_count_1m=${velocity}`);
-    animateNode('P');
-    animateNode('F');
+    addLog(`<b>Behavioral Lookup:</b> Account profile retrieval (txn_count=${velocity})`);
+    highlightNode('BRAIN');
+    highlightNode('KITCHEN');
     await sleep(800);
     
     // Step 4: Inference
     const latency = Math.floor(Math.random() * 15) + 5;
-    addLog(`<b>ML Inference:</b> ONNX Runtime, Score=${risk}, Latency=${latency}ms`);
+    addLog(`<b>Scoring:</b> ONNX Runtime (Champion v1), Score=${risk}, Latency=${latency}ms`);
     statLatency.innerText = `${latency}ms`;
+    highlightNode('JUDGE');
     await sleep(600);
     
-    // Step 5: Decision
-    animateNode('D');
-    await sleep(400);
-
+    // Step 5: Decision Result
     if (decision === 'BLOCK') {
         blockedCount++;
         statBlocked.innerText = blockedCount;
         addLog(`🛑 <b>DECISION: BLOCK</b> - ${reason}`, 'block');
-        animateNode('R');
+        highlightNode('NO');
     } else if (decision === 'REVIEW') {
         addLog(`🔍 <b>DECISION: REVIEW</b> - ${reason}`, 'review');
-        animateNode('M');
+        highlightNode('QM');
     } else {
         addLog(`✅ <b>DECISION: ALLOW</b> - ${reason}`);
-        animateNode('A');
+        highlightNode('OK');
     }
 
-    addHistoryRow(txId, amount, action, decision, reason);
+    addHistoryRow(txId, amount, decision, reason);
 }
 
-function animateNode(id) {
+function highlightNode(nodeId) {
     const svg = document.querySelector('.mermaid svg');
     if (!svg) return;
-    
-    // Mermaid uses specific ID patterns like "flowchart-U-..."
-    // We search for elements that contain the letter in their text content or ID
-    const nodes = svg.querySelectorAll('g.node');
-    nodes.forEach(node => {
-        const textElement = node.querySelector('span.nodeLabel') || node.querySelector('div') || node;
-        const nodeText = textElement.textContent || "";
-        
-        // Match specific node identifiers from the Mermaid graph definition
-        const isMatch = (id === 'U' && nodeText.includes('User')) ||
-                        (id === 'B' && nodeText.includes('Redpanda')) ||
-                        (id === 'P' && nodeText.includes('Processor')) ||
-                        (id === 'F' && nodeText.includes('Feast')) ||
-                        (id === 'D' && nodeText.includes('Decision')) ||
-                        (id === 'A' && nodeText.includes('✅')) ||
-                        (id === 'R' && nodeText.includes('🛑')) ||
-                        (id === 'M' && nodeText.includes('🔍'));
 
-        if (isMatch) {
-            // Apply a stronger highlight
-            const rect = node.querySelector('rect') || node.querySelector('polygon') || node.querySelector('path');
+    // Use a more aggressive selector to find the node container
+    // Mermaid nodes usually have IDs like 'flowchart-USER-xxx' or similar
+    const nodes = svg.querySelectorAll('.node');
+    nodes.forEach(node => {
+        // Check if the node's text or ID matches our identifier
+        const nodeLabel = node.querySelector('.nodeLabel') || node;
+        if (nodeLabel.textContent.includes(nodeId) || node.id.includes(nodeId)) {
+            const rect = node.querySelector('rect') || node.querySelector('circle') || node.querySelector('polygon') || node.querySelector('path');
             if (rect) {
+                // Force a very visible highlight
+                rect.classList.add('active-node');
                 const originalFill = rect.style.fill;
                 const originalStroke = rect.style.stroke;
-                const originalStrokeWidth = rect.style.strokeWidth;
-
-                rect.style.transition = 'all 0.3s ease';
-                rect.style.fill = '#4ade80';
-                rect.style.stroke = '#166534';
-                rect.style.strokeWidth = '4px';
+                
+                rect.style.fill = '#86efac'; // Green-300
+                rect.style.stroke = '#16a34a'; // Green-600
+                rect.style.strokeWidth = '5px';
 
                 setTimeout(() => {
                     rect.style.fill = originalFill;
                     rect.style.stroke = originalStroke;
-                    rect.style.strokeWidth = originalStrokeWidth;
+                    rect.style.strokeWidth = '2px';
+                    rect.classList.remove('active-node');
                 }, 1000);
             }
         }
@@ -144,3 +135,8 @@ function animateNode(id) {
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
+
+// Auto-run one transaction on load to show user it works
+window.addEventListener('load', () => {
+    setTimeout(() => triggerScenario('normal'), 2000);
+});
