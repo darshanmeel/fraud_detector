@@ -36,6 +36,10 @@ schemas:
 feast-apply:
 	docker compose exec feast feast apply
 
+test:
+	@echo "Running automated test suite..."
+	cd .. && pytest "Fraud Detection/tests"
+
 sim-normal:
 	@echo "Running normal simulation..."
 	# Assuming a simulator script exists at tools/tx-simulator/simulate.py
