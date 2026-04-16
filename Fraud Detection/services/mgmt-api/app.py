@@ -36,6 +36,11 @@ async def get_config():
 
 @app.patch("/config")
 async def update_config(thresholds: Thresholds):
+    if not (0.0 <= thresholds.low <= 1.0) or not (0.0 <= thresholds.high <= 1.0):
+        raise HTTPException(status_code=400, detail="Thresholds must be between 0.0 and 1.0")
+    if thresholds.low > thresholds.high:
+        raise HTTPException(status_code=400, detail="Low threshold cannot be higher than high threshold")
+    
     r.set("cfg:thresholds", thresholds.json())
     return {"status": "updated", "config": thresholds}
 

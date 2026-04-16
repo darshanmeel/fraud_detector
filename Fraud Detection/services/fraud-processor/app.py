@@ -46,6 +46,23 @@ app = faust.App('fraud-processor', broker=KAFKA_BROKER)
 # Redis for config
 r = redis.Redis(host=REDIS_HOST, port=6379, db=0, decode_responses=True)
 
+# In-memory cache for thresholds
+cached_thresholds = {"low": 0.3, "high": 0.7}
+
+@app.timer(interval=5.0)
+async def refresh_thresholds():
+    global cached_thresholds
+    try:
+        cfg = r.get("cfg:thresholds")
+        if cfg:
+            cached_thresholds = json.loads(cfg)
+            logger.debug(f"Thresholds refreshed: {cached_thresholds}")
+    except Exception as e:
+        logger.error(f"Error refreshing thresholds: {e}")
+
+def get_thresholds():
+    return cached_thresholds
+
 # Topics
 tx_topic = app.topic('tx.raw.hot', value_type=TransactionEvent)
 allow_topic = app.topic('decision.allow', value_type=DecisionEnvelope)
@@ -63,15 +80,6 @@ champion = ONNXInferenceEngine(CHAMPION_PATH, "v1-prod")
 challenger = None
 if os.path.exists(CHALLENGER_PATH):
     challenger = ONNXInferenceEngine(CHALLENGER_PATH, "v2-shadow")
-
-def get_thresholds():
-    try:
-        cfg = r.get("cfg:thresholds")
-        if cfg:
-            return json.loads(cfg)
-    except Exception as e:
-        logger.error(f"Error fetching thresholds from Redis: {e}")
-    return {"low": 0.3, "high": 0.7}
 
 @app.agent(tx_topic)
 async def process(transactions):
