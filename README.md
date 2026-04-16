@@ -36,67 +36,58 @@ graph TD
     end
 ```
 
+## 🎥 Live Flow: 3-Transaction Playback
+
+This "GIF-style" sequence shows how 3 different transactions are handled in real-time.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 👤 User
+    participant FP as 🧠 Fraud Processor
+    participant FW as ✍️ Feature Writer
+    participant FS as 🍽️ Feast Store
+    participant EC as 🧐 Explain Consumer
+
+    Note over U, EC: [TX 1]: The "Coffee Lover" (Normal Behavior)
+    U->>FW: Event: Buy Coffee ($5)
+    FW->>FS: Increment Count (Total: 1)
+    U->>FP: Event: Buy Coffee ($5)
+    FP->>FS: Fetch History (Count: 1)
+    FP->>FP: Predict: Score 0.05
+    FP-->>U: ✅ Decision: ALLOW
+
+    Note over U, EC: [TX 2]: The "Hacker Script" (Velocity Burst)
+    U->>FW: Event: 50 fast transactions
+    FW->>FS: Increment Count (Total: 51)
+    U->>FP: Event: 51st transaction
+    FP->>FS: Fetch History (Count: 51)
+    FP->>FP: Predict: Score 0.98
+    FP-->>U: 🛑 Decision: BLOCK
+    FP->>EC: Send to Auditor
+    EC->>EC: Write SHAP Log: "High Velocity"
+
+    Note over U, EC: [TX 3]: The "Big Spender" (Unusual Amount)
+    U->>FW: Event: Buy Rolex ($50,000)
+    FW->>FS: Increment Count (Total: 52)
+    U->>FP: Event: Buy Rolex ($50,000)
+    FP->>FS: Fetch History (Count: 52)
+    FP->>FP: Predict: Score 0.65
+    FP-->>U: 🔍 Decision: REVIEW
+    FP->>EC: Send to Auditor
+    EC->>EC: Write SHAP Log: "Amount Spike"
+```
+
 ## 🧩 Roles & Responsibilities: Who does what?
 
 Understanding the difference between behavioral tracking, system monitoring, and manual judging:
 
 | Component | Responsibility | Scope | Logic Trigger |
 | :--- | :--- | :--- | :--- |
-| **✍️ Feature Writer** | **Behavioral Tracking.** Updates the history of a *specific* account (e.g., "This user has 5 txns in 1 min"). | **Individual** | Increments RocksDB counters on every event. |
-| **📈 Drift Monitor** | **System Health.** Detects if *global* spending patterns have shifted away from what the model was trained on. | **Global** | Calculates a system-wide rolling average. |
-| **🧠 Fraud Processor**| **The Decider.** Combines the user's history with the current transaction to give a 0-1 risk score. | **Transactional** | Runs ONNX inference for every event. |
-| **🕹️ Management API** | **Human-in-the-Loop.** Allows operators to manually approve `REVIEW` cases or update risk thresholds. | **Administrative** | Manual HTTP request from an operator. |
-
-## 🔄 Transaction Lifecycle Deep-Dive
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant S as 🛠️ Simulator
-    participant FW as ✍️ Feature Writer
-    participant FP as 🧠 Fraud Processor
-    participant FS as 🍽️ Feast/Redis
-    participant EC as 🧐 Explain Consumer
-    participant DM as 📈 Drift Monitor
-
-    Note over S: [Input]: Raw TX Parameters<br/>[Trigger]: simulate.py -> produce_event()
-    S->>FP: 1. Input: TransactionEvent (JSON)
-    S->>FW: 1. Input: TransactionEvent (JSON)
-    S->>DM: 1. Input: TransactionEvent (JSON)
-
-    rect rgb(240, 240, 240)
-    Note over FW: [Internal]: account_tx_counts[id] += 1
-    FW->>FS: 2. Output: store.write_to_online_store()
-    end
-
-    rect rgb(230, 240, 255)
-    Note over FP: [Internal]: hydrate -> predict -> route
-    FP->>FS: 3. Input: account_id
-    FS-->>FP: 4. Output: txn_count_1m (e.g. 15)
-    
-    Note over FP: Logic: score = model.predict(X)
-    
-    alt score < 0.3 (ALLOW)
-        FP->>S: 5. Output: decision.allow
-    else 0.3 < score < 0.7 (REVIEW)
-        FP->>S: 5. Output: decision.review
-        FP-->>EC: 6. Input: Decision + Features
-    else score > 0.7 (BLOCK)
-        FP->>S: 5. Output: decision.block
-        FP-->>EC: 6. Input: Decision + Features
-    end
-    end
-
-    rect rgb(255, 245, 230)
-    Note over EC: [Internal]: model.explain() (SHAP)
-    EC->>EC: 7. Output: Write MinIO audit/{id}.json
-    end
-
-    rect rgb(245, 255, 245)
-    Note over DM: [Internal]: rolling_avg['total'] update
-    DM->>DM: 8. Trigger: warning if avg > $100
-    end
-```
+| **✍️ Feature Writer** | **Behavioral Tracking.** Updates the history of a *specific* account (e.g., "This user has 5 txns in 1 min"). | **Individual** | `account_tx_counts[id] += 1` on every event. |
+| **📈 Drift Monitor** | **System Health.** Detects if *global* spending patterns have shifted away from what the model was trained on. | **Global** | `new_avg = (total + amount) / count`. |
+| **🧠 Fraud Processor**| **The Decider.** Combines the user's history with the current transaction to give a 0-1 risk score. | **Transactional** | `champion.predict(features)` for every event. |
+| **🕹️ Management API** | **Human-in-the-Loop.** Allows operators to manually approve `REVIEW` cases or update risk thresholds. | **Administrative** | Manual HTTP `PATCH /config` request. |
 
 ---
 
@@ -112,55 +103,21 @@ sequenceDiagram
 
 ## 🏁 Getting Started
 
-### Prerequisites
-
-- Docker Desktop / Docker Engine with Compose V2
-- Python 3.11+
-- `rpk` (Redpanda CLI) - Optional, for inspection
-
 ### Quick Start
 
-1. **Enter the project directory:**
-   ```bash
-   cd "Fraud Detection"
-   ```
+1.  **Enter the project directory:** `cd "Fraud Detection"`
+2.  **Infrastructure:** `make core`
+3.  **Bootstrap:** `make topics` and `make buckets`
+4.  **Full Stack:** `make obs`
+5.  **Simulate:** `make sim-anomaly`
 
-2. **Start the core infrastructure:**
-   ```bash
-   make core
-   ```
-
-3. **Bootstrap topics and buckets:**
-   ```bash
-   make topics
-   make buckets
-   ```
-
-4. **Start the full stack (including observability):**
-   ```bash
-   make obs
-   ```
-
-## 🧪 Testing & Real-Time Monitoring
-
-### 1. Register Schemas
-Register Avro schemas with the built-in Redpanda Schema Registry:
-```bash
-make schemas
-```
-
-### 2. Run Simulations
-Generate transactions to see the engine in action:
-- **Normal Traffic (Happy Path):** `make sim-normal`
-- **Anomaly Traffic (Triggers Blocks/Reviews):** `make sim-anomaly`
-
-### 3. Real-Time UI Monitoring
+### Real-Time UI Monitoring
 
 | UI | URL | Purpose |
 | :--- | :--- | :--- |
-| **Redpanda Console** | [http://localhost:8080](http://localhost:8080) | **View Live Transactions.** Navigate to `Topics -> decision.block` to see fraud detections in real-time. |
-| **SigNoz** | [http://localhost:3301](http://localhost:3301) | **Latency Tracing.** Search for `fraud-processor` traces to see microsecond breakdowns. |
-| **Feast UI** | [http://localhost:6566](http://localhost:6566) | **Feature State.** Monitor real-time behavioral features like `txn_count_1m`. |
+| **Redpanda Console** | [http://localhost:8080](http://localhost:8080) | **View Live Transactions.** See `decision.block` envelopes in real-time. |
+| **SigNoz** | [http://localhost:3301](http://localhost:3301) | **Latency Tracing.** Search for `fraud-processor` traces. |
+| **Feast UI** | [http://localhost:6566](http://localhost:6566) | **Feature State.** Monitor `txn_count_1m` values. |
 
 ## 📁 Repository Structure
 
