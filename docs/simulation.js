@@ -1,45 +1,61 @@
 mermaid.initialize({ startOnLoad: true, flowchart: { useMaxWidth: true, htmlLabels: true } });
 
 let blockedCount = 0;
-const logContainer = document.getElementById('log-container');
-const statBlocked = document.getElementById('stat-blocked');
-const statLatency = document.getElementById('stat-latency');
-const historyBody = document.getElementById('history-body');
+
+function getElements() {
+    return {
+        logContainer: document.getElementById('log-container'),
+        statBlocked: document.getElementById('stat-blocked'),
+        statLatency: document.getElementById('stat-latency'),
+        historyBody: document.getElementById('history-body')
+    };
+}
 
 function addLog(message, type = 'normal') {
+    const { logContainer } = getElements();
     const entry = document.createElement('div');
     entry.className = `log-entry ${type === 'block' ? 'log-block' : type === 'review' ? 'log-review' : ''}`;
     const timestamp = new Date().toLocaleTimeString();
     entry.innerHTML = `<span class="text-gray-500">[${timestamp}]</span> ${message}`;
     logContainer.prepend(entry);
-    
-    if (logContainer.children.length > 50) {
-        logContainer.removeChild(logContainer.lastChild);
-    }
+    if (logContainer.children.length > 50) logContainer.removeChild(logContainer.lastChild);
 }
 
 function addHistoryRow(id, amount, decision, reason) {
+    const { historyBody } = getElements();
+    if (!historyBody) return;
+    
     const row = document.createElement('tr');
-    row.className = 'hover:bg-gray-50 transition-colors';
+    row.className = 'hover:bg-gray-50 transition-all duration-500 bg-blue-50'; // Start with blue highlight
+    
     const decisionBadge = decision === 'BLOCK' 
-        ? '<span class="px-2 py-1 bg-red-100 text-red-700 rounded-full font-semibold">BLOCK</span>' 
+        ? '<span class="px-2 py-1 bg-red-100 text-red-700 rounded-full font-bold">BLOCK</span>' 
         : decision === 'REVIEW' 
-        ? '<span class="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full font-semibold">REVIEW</span>' 
-        : '<span class="px-2 py-1 bg-green-100 text-green-700 rounded-full font-semibold">ALLOW</span>';
+        ? '<span class="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full font-bold">REVIEW</span>' 
+        : '<span class="px-2 py-1 bg-green-100 text-green-700 rounded-full font-bold">APPROVE</span>';
     
     row.innerHTML = `
         <td class="px-3 py-3 font-mono text-[10px] text-gray-400">${id}</td>
-        <td class="px-3 py-3 font-medium text-gray-700">€${(amount/100).toFixed(2)}</td>
+        <td class="px-3 py-3 font-bold text-gray-700 text-sm">€${(amount/100).toFixed(2)}</td>
         <td class="px-3 py-3">${decisionBadge}</td>
-        <td class="px-3 py-3 text-gray-500 italic">${reason}</td>
+        <td class="px-3 py-3 text-gray-600 text-xs">${reason}</td>
     `;
+    
     historyBody.prepend(row);
+    
+    // Remove blue highlight after a second
+    setTimeout(() => {
+        row.classList.remove('bg-blue-50');
+    }, 2000);
+
     if (historyBody.children.length > 10) {
         historyBody.removeChild(historyBody.lastChild);
     }
 }
 
 async function triggerScenario(type) {
+    const { statBlocked, statLatency } = getElements();
+    
     let amount = 5000; // €50
     let velocity = 1;
     let decision = 'ALLOW';
@@ -50,52 +66,63 @@ async function triggerScenario(type) {
         velocity = 21;
         decision = 'BLOCK';
         risk = 0.95;
-        reason = "Velocity Alert: 21 transactions in 1 minute detected.";
+        reason = "User had 20 txn/min; 21st triggered BLOCK.";
     } else if (type === 'spike') {
         amount = 500000; // €5000
         decision = 'REVIEW';
         risk = 0.65;
-        reason = "Amount Spike: Transaction exceeds profile threshold.";
+        reason = "€5,000 exceeds user profile threshold.";
     }
 
-    const txId = Math.random().toString(36).substring(7).toUpperCase();
+    const txId = "TXN-" + Math.random().toString(36).substring(7).toUpperCase();
     
-    // Step 1: User -> Bus
-    addLog(`<b>New Event:</b> ID=${txId}, User trigger transaction...`);
+    // STEP 1: TRANSACTION INBOUND
+    addLog(`<b>[INBOUND]</b> ${txId} for €${(amount/100).toFixed(2)} detected.`);
     highlightNode('USER');
-    await sleep(600);
+    await sleep(1000); // SLOW
     
-    // Step 2: Bus -> Processor
+    // STEP 2: BUS (REDPANDA)
+    addLog(`<b>[BUS]</b> Event routed to Kafka/Redpanda topic: <code>tx.raw.hot</code>`);
     highlightNode('BUS');
-    await sleep(600);
+    await sleep(1000);
     
-    // Step 3: Processor -> Feast
-    addLog(`<b>Behavioral Lookup:</b> Account profile retrieval (txn_count=${velocity})`);
+    // STEP 3: FRAUD PROCESSOR START
+    addLog(`<b>[PROCESSOR]</b> Faust agent consuming event...`);
     highlightNode('BRAIN');
-    highlightNode('KITCHEN');
     await sleep(800);
     
-    // Step 4: Inference
+    // STEP 4: PULL HISTORY (FEAST)
+    addLog(`<b>[FEAST]</b> Pulling online features: <code>txn_count_1m</code> = ${velocity}`);
+    highlightNode('KITCHEN');
+    await sleep(1200);
+    
+    // STEP 5: DRIFT CHECK
+    addLog(`<b>[DRIFT]</b> Comparing against global distribution... No drift.`);
+    highlightNode('DRIFT');
+    await sleep(1000);
+    
+    // STEP 6: MODEL PREDICTION (ONNX)
     const latency = Math.floor(Math.random() * 15) + 5;
-    addLog(`<b>Scoring:</b> ONNX Runtime (Champion v1), Score=${risk}, Latency=${latency}ms`);
+    addLog(`<b>[ONNX]</b> Running Champion Model. Inference Score = ${risk}`);
     statLatency.innerText = `${latency}ms`;
     highlightNode('JUDGE');
-    await sleep(600);
+    await sleep(1000);
     
-    // Step 5: Decision Result
+    // STEP 7: FINAL DECISION
     if (decision === 'BLOCK') {
         blockedCount++;
         statBlocked.innerText = blockedCount;
-        addLog(`🛑 <b>DECISION: BLOCK</b> - ${reason}`, 'block');
+        addLog(`🛑 <b>RESULT: BLOCK</b> - ${reason}`, 'block');
         highlightNode('NO');
     } else if (decision === 'REVIEW') {
-        addLog(`🔍 <b>DECISION: REVIEW</b> - ${reason}`, 'review');
+        addLog(`🔍 <b>RESULT: REVIEW</b> - ${reason}`, 'review');
         highlightNode('QM');
     } else {
-        addLog(`✅ <b>DECISION: ALLOW</b> - ${reason}`);
+        addLog(`✅ <b>RESULT: APPROVE</b> - ${reason}`);
         highlightNode('OK');
     }
 
+    // STEP 8: UPDATE TABLE
     addHistoryRow(txId, amount, decision, reason);
 }
 
@@ -103,30 +130,42 @@ function highlightNode(nodeId) {
     const svg = document.querySelector('.mermaid svg');
     if (!svg) return;
 
-    // Use a more aggressive selector to find the node container
-    // Mermaid nodes usually have IDs like 'flowchart-USER-xxx' or similar
+    // Use a more robust selector that works with Mermaid's idiosyncratic naming
     const nodes = svg.querySelectorAll('.node');
     nodes.forEach(node => {
-        // Check if the node's text or ID matches our identifier
-        const nodeLabel = node.querySelector('.nodeLabel') || node;
-        if (nodeLabel.textContent.includes(nodeId) || node.id.includes(nodeId)) {
-            const rect = node.querySelector('rect') || node.querySelector('circle') || node.querySelector('polygon') || node.querySelector('path');
-            if (rect) {
-                // Force a very visible highlight
-                rect.classList.add('active-node');
-                const originalFill = rect.style.fill;
-                const originalStroke = rect.style.stroke;
-                
-                rect.style.fill = '#86efac'; // Green-300
-                rect.style.stroke = '#16a34a'; // Green-600
-                rect.style.strokeWidth = '5px';
+        const text = node.textContent || "";
+        const id = node.id || "";
+        
+        // Match our node identifiers
+        const isMatch = (nodeId === 'USER' && (text.includes('User') || id.includes('USER'))) ||
+                        (nodeId === 'BUS' && (text.includes('Redpanda') || id.includes('BUS'))) ||
+                        (nodeId === 'BRAIN' && (text.includes('Processor') || id.includes('BRAIN'))) ||
+                        (nodeId === 'KITCHEN' && (text.includes('Feast') || id.includes('KITCHEN'))) ||
+                        (nodeId === 'DRIFT' && (text.includes('Monitor') || id.includes('DRIFT'))) ||
+                        (nodeId === 'JUDGE' && (text.includes('Decision') || id.includes('JUDGE'))) ||
+                        (nodeId === 'OK' && (text.includes('Approved') || id.includes('OK'))) ||
+                        (nodeId === 'NO' && (text.includes('Blocked') || id.includes('NO'))) ||
+                        (nodeId === 'QM' && (text.includes('Review') || id.includes('QM')));
+
+        if (isMatch) {
+            const shape = node.querySelector('rect, circle, polygon, path, ellipse');
+            if (shape) {
+                // Save original styles
+                const originalFill = shape.style.fill;
+                const originalStroke = shape.style.stroke;
+                const originalWidth = shape.style.strokeWidth;
+
+                // Apply highlight
+                shape.style.transition = 'all 0.4s ease';
+                shape.style.fill = '#4ade80'; // Bright Green
+                shape.style.stroke = '#166534';
+                shape.style.strokeWidth = '8px';
 
                 setTimeout(() => {
-                    rect.style.fill = originalFill;
-                    rect.style.stroke = originalStroke;
-                    rect.style.strokeWidth = '2px';
-                    rect.classList.remove('active-node');
-                }, 1000);
+                    shape.style.fill = originalFill;
+                    shape.style.stroke = originalStroke;
+                    shape.style.strokeWidth = originalWidth;
+                }, 1500);
             }
         }
     });
@@ -136,7 +175,11 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Auto-run one transaction on load to show user it works
+// Ensure the page is fully loaded before starting
 window.addEventListener('load', () => {
-    setTimeout(() => triggerScenario('normal'), 2000);
+    console.log("Simulator Loaded.");
+    // Wait for Mermaid to finish rendering
+    setTimeout(() => {
+        triggerScenario('normal');
+    }, 2500);
 });
