@@ -38,9 +38,7 @@ graph TD
 
 ## 🎥 Live Flow: 3-Transaction Playback
 
-![Fraud Detection Flow Animation](./Fraud%20Detection/docs/assets/flow_animation.gif)
-
-This animation walks through three specific scenarios:
+This sequence walks through three specific scenarios:
 1. **✅ ALLOW:** Normal "Coffee Lover" behavior.
 2. **🛑 BLOCK:** "Hacker Script" velocity burst (51 fast transactions).
 3. **🔍 REVIEW:** "Big Spender" unusual amount (Rolex purchase).
