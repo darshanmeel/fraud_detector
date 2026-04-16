@@ -1,5 +1,9 @@
-faust
+faust-streaming
+aiokafka<0.9.0
+kafka-python-ng
 pyiceberg[pyarrow]
 s3fs
-thrift-py3
+thrift
 boto3
+onnxruntime
+

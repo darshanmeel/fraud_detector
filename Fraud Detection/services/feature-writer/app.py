@@ -39,18 +39,34 @@ async def update_features(transactions):
             new_count = account_tx_counts[tx.account_id]
             
             # Write the updated feature to Feast Online Store
-            # For the prototype, we push on every event, but in production
-            # we might batch these or push on a timer.
             pd = import_pandas_as_pd()
+            
+            # Provide all fields required by the Feature View schema
+            feature_data = {
+                "account_id": tx.account_id,
+                "event_timestamp": datetime.utcnow(),
+                "txn_count_1m": float(new_count),
+                "txn_count_5m": 0.0,
+                "txn_count_15m": 0.0,
+                "txn_count_1h": 0.0,
+                "txn_count_24h": 0.0,
+                "spend_sum_1m": 0.0,
+                "spend_sum_5m": 0.0,
+                "spend_sum_1h": 0.0,
+                "spend_avg_24h": 0.0,
+                "distinct_merchants_1h": 0,
+                "distinct_countries_24h": 0,
+                "distinct_devices_24h": 0,
+                "session_txn_count": 0,
+                "session_duration_s": 0.0,
+                "schema_version": "1.0",
+                "feature_timestamp": int(datetime.utcnow().timestamp()),
+                "low_confidence": False
+            }
+            
             store.write_to_online_store(
                 feature_view_name="account_velocity",
-                df=pd.DataFrame([
-                    {
-                        "account_id": tx.account_id,
-                        "txn_count_1m": float(new_count),
-                        "event_timestamp": datetime.utcnow()
-                    }
-                ])
+                df=pd.DataFrame([feature_data])
             )
             logger.info(f"Updated account {tx.account_id} txn_count_1m to {new_count}")
             

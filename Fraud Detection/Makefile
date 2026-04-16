@@ -29,9 +29,7 @@ buckets:
 
 schemas:
 	@echo "Registering schemas..."
-	@curl -X POST http://localhost:8081/subjects/tx-raw-value/versions -H "Content-Type: application/vnd.schemaregistry.v1+json" -d @schemas/TransactionEvent.avsc
-	@curl -X POST http://localhost:8081/subjects/feature-vector-value/versions -H "Content-Type: application/vnd.schemaregistry.v1+json" -d @schemas/FeatureVector.avsc
-	@curl -X POST http://localhost:8081/subjects/decision-value/versions -H "Content-Type: application/vnd.schemaregistry.v1+json" -d @schemas/DecisionEnvelope.avsc
+	@python register_schemas.py
 
 feast-apply:
 	docker compose exec feast feast apply

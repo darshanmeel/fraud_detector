@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 # Faust App configuration
 KAFKA_BROKER = os.environ.get('KAFKA_BROKER', 'kafka://redpanda:29092')
-app = faust.App('drift-monitor', broker=KAFKA_BROKER, topic_partitions=16)
+app = faust.App('drift-monitor', broker=KAFKA_BROKER, topic_partitions=8)
 
 # Topics
 tx_topic = app.topic('tx.raw.hot', value_type=TransactionEvent)

@@ -94,12 +94,17 @@ async def process(transactions):
                     entity_rows=[{"account_id": tx.account_id}]
                 ).to_dict()
 
+                # Robust extraction: handle missing keys or None values in lists
+                txn_count_list = feature_vector.get("txn_count_1m", [0])
+                txn_count = txn_count_list[0] if txn_count_list and txn_count_list[0] is not None else 0
+
                 features = {
-                    "txn_count_1m": feature_vector.get("txn_count_1m", [0])[0],
+                    "txn_count_1m": txn_count,
                     "amount_cents": tx.amount_cents
                 }
 
                 # Inference
+                logger.info(f"Predicting for TX {tx.transaction_id} with features: {features}")
                 score = champion.predict(features)
 
                 challenger_score = -1.0
@@ -139,7 +144,7 @@ async def process(transactions):
                 logger.info(f"TX {tx.transaction_id} -> {decision} (Score: {score}, Latency: {latency:.2f}ms)")
 
             except Exception as e:
-                logger.error(f"Error: {e}")
+                logger.exception(f"Error processing transaction {tx.transaction_id}: {e}")
                 span.record_exception(e)
 
 @app.timer(interval=60.0)

@@ -1,4 +1,3 @@
-version: '3.8'
 
 networks:
   act-net:
@@ -46,7 +45,6 @@ services:
       - "9092:9092"
       - "9644:9644"
       - "8081:8081"
-      - "8080:8080"
     networks:
       - act-net
       - explain-net
@@ -70,6 +68,20 @@ services:
         limits:
           memory: 2g
           cpus: '2.0'
+
+  redpanda-console:
+    image: redpandadata/console:latest
+    container_name: fraud-redpanda-console
+    profiles: [core]
+    ports:
+      - "8080:8080"
+    networks:
+      - act-net
+    environment:
+      - KAFKA_BROKERS=redpanda:29092
+    depends_on:
+      redpanda:
+        condition: service_healthy
 
   init-redpanda:
     image: redpandadata/redpanda:${REDPANDA_VERSION}
@@ -201,6 +213,7 @@ services:
     networks:
       - act-net
       - obs-net
+      - explain-net
     environment:
       KAFKA_BROKER: "kafka://redpanda:29092"
       FEAST_REPO_PATH: "/app/feast_repo"
@@ -233,8 +246,13 @@ services:
       - obs-net
     environment:
       KAFKA_BROKER: "kafka://redpanda:29092"
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      FEAST_S3_ENDPOINT_URL: "http://minio:9000"
     depends_on:
       redpanda:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     deploy:
       resources:
@@ -284,6 +302,28 @@ services:
           memory: 256m
           cpus: '0.5'
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: fraud-clickhouse
+    profiles: [obs]
+    ports:
+      - "9000:9000"
+      - "8123:8123"
+    networks:
+      - obs-net
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '1.0'
+
   signoz:
     image: signoz/signoz:latest
     container_name: fraud-signoz
@@ -294,6 +334,13 @@ services:
       - obs-net
     volumes:
       - signoz-data:/var/lib/signoz
+    environment:
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=9000
+      - SIGNOZ_TOKENIZER_JWT_SECRET=supersecret123
+    depends_on:
+      clickhouse:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -389,6 +436,8 @@ services:
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
+    command: bash -c "airflow db migrate && airflow users create --username admin --firstname admin --lastname admin --role Admin --email admin@example.com --password admin && airflow webserver"
     depends_on:
       postgres:
         condition: service_healthy
@@ -407,6 +456,7 @@ services:
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+    command: scheduler
     depends_on:
       postgres:
         condition: service_healthy
@@ -421,4 +471,5 @@ volumes:
   redpanda-data:
   minio-data:
   signoz-data:
+  clickhouse-data:
   postgres-data:

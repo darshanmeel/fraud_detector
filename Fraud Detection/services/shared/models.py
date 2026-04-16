@@ -3,12 +3,12 @@ from typing import List, Optional
 
 class TransactionEvent(faust.Record, serializer='json'):
     transaction_id: str
-    source_system: str = 'mobile'
     account_id: str
     amount_cents: int
     merchant_id: str
     country_code: str
     event_timestamp: int
+    source_system: str = 'mobile'
     device_id: Optional[str] = None
     ip_address: Optional[str] = None
     merchant_category: str = '5411'
