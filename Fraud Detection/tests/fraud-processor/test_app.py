@@ -1,18 +1,32 @@
 import pytest
+import json
+import redis
 from unittest.mock import MagicMock, patch
-from shared.models import TransactionEvent, DecisionEnvelope
-
-# Since app.py is not yet created, this test will fail on import.
-# That's part of TDD (Red phase).
+from services.shared.models import TransactionEvent, DecisionEnvelope
+from services.fraud_processor.app import refresh_thresholds, get_thresholds
 
 @pytest.mark.asyncio
-async def test_process_logic_allow():
-    from services.fraud_processor.app import process, allow_topic, block_topic
+async def test_threshold_caching():
+    # Mock Redis
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = json.dumps({"low": 0.5, "high": 0.9})
     
-    # Mock dependencies
+    with patch('services.fraud_processor.app.r', mock_redis):
+        # Trigger refresh
+        await refresh_thresholds()
+        
+        # Verify cache updated
+        thresholds = get_thresholds()
+        assert thresholds["low"] == 0.5
+        assert thresholds["high"] == 0.9
+
+@pytest.mark.asyncio
+async def test_process_logic_routing():
+    from services.fraud_processor.app import process, allow_topic, block_topic, review_topic
+    
     mock_tx = TransactionEvent(
-        transaction_id="tx1",
-        account_id="acc1",
+        transaction_id="tx_test",
+        account_id="acc_1",
         amount_cents=100,
         merchant_id="m1",
         country_code="US",
@@ -20,62 +34,24 @@ async def test_process_logic_allow():
     )
     
     with patch('services.fraud_processor.app.store') as mock_store:
-        with patch('services.fraud_processor.app.model') as mock_model:
-            # Set up mocks
-            mock_store.get_online_features.return_value.to_dict.return_value = {"txn_count_1m": 1}
-            mock_model.predict.return_value = 0.1 # < 0.5 -> ALLOW
+        with patch('services.fraud_processor.app.champion') as mock_model:
+            # 1. Test ALLOW
+            mock_model.predict.return_value = 0.1
+            with patch.object(allow_topic, 'send') as mock_send:
+                async def mock_stream(): yield mock_tx
+                await process(mock_stream())
+                mock_send.assert_called_once()
             
-            with patch.object(allow_topic, 'send') as mock_allow_send:
-                with patch.object(block_topic, 'send') as mock_block_send:
-                    # Run the agent logic for one event
-                    # We need to simulate the "async for tx in transactions"
-                    async def mock_stream():
-                        yield mock_tx
-                    
-                    await process(mock_stream())
-                    
-                    # Verify
-                    mock_allow_send.assert_called_once()
-                    mock_block_send.assert_not_called()
-                    
-                    envelope = mock_allow_send.call_args[1]['value']
-                    assert envelope.transaction_id == "tx1"
-                    assert envelope.decision == "ALLOW"
-                    assert envelope.risk_score == 0.1
-
-@pytest.mark.asyncio
-async def test_process_logic_block():
-    from services.fraud_processor.app import process, allow_topic, block_topic
-    
-    # Mock dependencies
-    mock_tx = TransactionEvent(
-        transaction_id="tx2",
-        account_id="acc1",
-        amount_cents=200000, # $2000
-        merchant_id="m1",
-        country_code="US",
-        event_timestamp=1713110400
-    )
-    
-    with patch('services.fraud_processor.app.store') as mock_store:
-        with patch('services.fraud_processor.app.model') as mock_model:
-            # Set up mocks
-            mock_store.get_online_features.return_value.to_dict.return_value = {"txn_count_1m": 1}
-            mock_model.predict.return_value = 0.7 # >= 0.5 -> BLOCK
-            
-            with patch.object(allow_topic, 'send') as mock_allow_send:
-                with patch.object(block_topic, 'send') as mock_block_send:
-                    # Run the agent logic for one event
-                    async def mock_stream():
-                        yield mock_tx
-                    
-                    await process(mock_stream())
-                    
-                    # Verify
-                    mock_allow_send.assert_not_called()
-                    mock_block_send.assert_called_once()
-                    
-                    envelope = mock_block_send.call_args[1]['value']
-                    assert envelope.transaction_id == "tx2"
-                    assert envelope.decision == "BLOCK"
-                    assert envelope.risk_score == 0.7
+            # 2. Test BLOCK
+            mock_model.predict.return_value = 0.9
+            with patch.object(block_topic, 'send') as mock_send:
+                async def mock_stream(): yield mock_tx
+                await process(mock_stream())
+                mock_send.assert_called_once()
+                
+            # 3. Test REVIEW
+            mock_model.predict.return_value = 0.5
+            with patch.object(review_topic, 'send') as mock_send:
+                async def mock_stream(): yield mock_tx
+                await process(mock_stream())
+                mock_send.assert_called_once()

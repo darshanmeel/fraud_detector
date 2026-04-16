@@ -133,6 +133,9 @@ make test
 
 ## 📁 Repository Structure
 
+- **[GEMINI.md](./GEMINI.md)**: Foundational mandates and foundational truth for all agents.
+- **[AGENTS.md](./AGENTS.md)**: Specialized AI roles and operational mental models.
+- **[TECHNICAL_BLUEPRINT.md](./TECHNICAL_BLUEPRINT.md)**: Deep-dive into paths, patterns, and scaling.
 - `Fraud Detection/services`: Individual micro-agents (fraud-processor, feature-writer, etc.)
 - `Fraud Detection/config`: Component configurations (Feast, Redis, Redpanda, OTel)
 - `Fraud Detection/schemas`: Avro schema definitions for event versioning

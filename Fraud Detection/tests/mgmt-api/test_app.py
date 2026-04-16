@@ -1,8 +1,17 @@
 from fastapi.testclient import TestClient
 from services.mgmt_api.app import app
 from unittest.mock import patch
+import json
 
 client = TestClient(app)
+
+def test_get_config():
+    with patch('services.mgmt_api.app.r') as mock_redis:
+        mock_redis.get.return_value = json.dumps({"low": 0.4, "high": 0.8})
+        response = client.get("/config")
+        assert response.status_code == 200
+        assert "thresholds" in response.json()
+        assert response.json()["thresholds"]["low"] == 0.4
 
 def test_update_config_validation_pass():
     with patch('services.mgmt_api.app.r') as mock_redis:
