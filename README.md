@@ -56,7 +56,7 @@ graph TD
 
 ### Quick Start
 
-1. **Clone the repository and enter the project directory:**
+1. **Enter the project directory:**
    ```bash
    cd "Fraud Detection"
    ```
@@ -77,7 +77,7 @@ graph TD
    make obs
    ```
 
-## 🧪 Testing
+## 🧪 Testing & Real-Time Monitoring
 
 ### 1. Register Schemas
 Register Avro schemas with the built-in Redpanda Schema Registry:
@@ -87,33 +87,59 @@ make schemas
 
 ### 2. Run Simulations
 Generate transactions to see the engine in action:
-- **Normal Traffic:** `make sim-normal`
-- **Anomaly/Fraud Traffic:** `make sim-anomaly`
+- **Normal Traffic (Happy Path):**
+  ```bash
+  make sim-normal
+  ```
+- **Anomaly Traffic (Triggers Blocks/Reviews):**
+  ```bash
+  make sim-anomaly
+  ```
 
-### 3. Verify Decisions
-Monitor the block topic for fraud detections:
-```bash
-docker exec fraud-redpanda rpk topic consume decision.block --brokers localhost:29092
+### 3. Real-Time UI Monitoring
+
+| UI | URL | Purpose |
+| :--- | :--- | :--- |
+| **Redpanda Console** | [http://localhost:8080](http://localhost:8080) | **View Live Transactions.** Navigate to `Topics -> decision.block` to see fraud detections in real-time. |
+| **SigNoz** | [http://localhost:3301](http://localhost:3301) | **Latency Tracing.** Search for `fraud-processor` traces to see microsecond breakdowns. |
+| **Feast UI** | [http://localhost:6566](http://localhost:6566) | **Feature State.** Monitor real-time behavioral features like `txn_count_1m`. |
+
+### 4. Example Payloads
+
+**Incoming Transaction (`tx.raw.hot`):**
+```json
+{
+  "transaction_id": "550e8400-e29b-41d4-a716-446655440000",
+  "account_id": "acc_12345",
+  "amount_cents": 50000,
+  "merchant_id": "merch_99",
+  "country_code": "US",
+  "event_timestamp": 1713110400000
+}
 ```
 
-## 📊 Observability
-
-Access the dashboards:
-- **SigNoz (Metrics/Traces):** [http://localhost:3301](http://localhost:3301)
-- **Feast UI:** [http://localhost:6566](http://localhost:6566)
-- **Redpanda Console:** [http://localhost:8080](http://localhost:8080)
+**Fraud Decision (`decision.block`):**
+```json
+{
+  "transaction_id": "550e8400-e29b-41d4-a716-446655440000",
+  "decision": "BLOCK",
+  "risk_score": 0.92,
+  "model_version": "champion-v1",
+  "flags": ["velocity_burst"]
+}
+```
 
 ## 📁 Repository Structure
 
-- `/services`: Individual micro-agents (fraud-processor, feature-writer, etc.)
-- `/config`: Component configurations (Feast, Redis, Redpanda, OTel)
-- `/schemas`: Avro schema definitions for event versioning
-- `/docs`: Technical specifications and architectural deep-dives
-- `/reviews`: Historical code review summaries indexed by commit hash
+- `Fraud Detection/services`: Individual micro-agents (fraud-processor, feature-writer, etc.)
+- `Fraud Detection/config`: Component configurations (Feast, Redis, Redpanda, OTel)
+- `Fraud Detection/schemas`: Avro schema definitions for event versioning
+- `Fraud Detection/docs`: Technical specifications and architectural deep-dives
+- `Fraud Detection/reviews`: Historical code review summaries indexed by commit hash
 
 ## ⚖️ Governance & Compliance
 
 This engine is designed to comply with **DORA** and the **EU AI Act**:
 - **Explainability:** Asynchronous SHAP value computation for high-risk decisions.
-- **Auditability:** Immutable WORM storage for all decision envelopes.
+- **Auditability:** Immutable WORM storage for all decision envelopes in MinIO.
 - **Human-in-the-Loop:** `REVIEW` decision class for manual operator intervention via Management API.
