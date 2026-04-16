@@ -307,7 +307,7 @@ services:
     container_name: fraud-clickhouse
     profiles: [obs]
     ports:
-      - "9000:9000"
+      - "9002:9000"
       - "8123:8123"
     networks:
       - obs-net
@@ -316,8 +316,9 @@ services:
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 10
+      start_period: 60s
     deploy:
       resources:
         limits:
@@ -465,6 +466,31 @@ services:
         limits:
           memory: 1g
           cpus: '1.0'
+
+  sim-ui:
+    build:
+      context: .
+      dockerfile: services/sim-ui/Dockerfile
+    container_name: fraud-sim-ui
+    profiles: [mgmt]
+    ports:
+      - "8050:8050"
+    networks:
+      - act-net
+      - explain-net
+      - mgmt-net
+    environment:
+      KAFKA_BROKER: "redpanda:29092"
+      FEAST_S3_ENDPOINT_URL: "http://minio:9000"
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
 
 volumes:
   redis-data:

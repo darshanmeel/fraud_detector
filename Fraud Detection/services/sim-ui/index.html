@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fraud Detector | Control Center</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f0f2f5; font-family: 'Inter', sans-serif; }
+        .nav-tabs { border-bottom: 2px solid #dee2e6; margin-bottom: 20px; }
+        .nav-link { color: #495057; font-weight: 500; border: none; }
+        .nav-link.active { color: #0d6efd !important; border-bottom: 2px solid #0d6efd !important; background: transparent !important; }
+        .card { border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: none; }
+        #log-container, #sys-logs { font-family: 'Fira Code', 'Courier New', monospace; background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 8px; height: 500px; overflow-y: auto; font-size: 0.85rem; }
+        .log-line { margin-bottom: 2px; }
+        .log-error { color: #f44336; font-weight: bold; }
+        .log-warning { color: #ffeb3b; }
+        .log-meta { color: #888; margin-right: 10px; }
+        .status-up { color: #28a745; }
+        .status-down { color: #dc3545; }
+        .service-card { transition: transform 0.2s; cursor: pointer; }
+        .service-card:hover { transform: translateY(-5px); }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4 px-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="m-0">🛡️ Fraud Engine Control Center</h2>
+            <div id="connection-status" class="badge bg-success">System Online</div>
+        </div>
+
+        <ul class="nav nav-tabs" id="myTab" role="tablist">
+            <li class="nav-item">
+                <button class="nav-link active" id="sim-tab" data-bs-toggle="tab" data-bs-target="#sim" type="button">Live Simulator</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" id="dash-tab" data-bs-toggle="tab" data-bs-target="#dash" type="button" onclick="loadServices()">System Dashboard</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" id="logs-tab" data-bs-toggle="tab" data-bs-target="#logs" type="button" onclick="startLogStream()">System Logs</button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="myTabContent">
+            <!-- Simulator Tab -->
+            <div class="tab-pane fade show active" id="sim">
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <div class="card p-4">
+                            <h5 class="mb-3">Inject Transaction</h5>
+                            <div class="mb-3">
+                                <label class="form-label">Account ID</label>
+                                <input type="text" id="acc_id" class="form-control" value="user_99">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Amount (Cents)</label>
+                                <input type="number" id="amt" class="form-control" value="5000">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Merchant ID</label>
+                                <input type="text" id="mer_id" class="form-control" value="stripe_test">
+                            </div>
+                            <button class="btn btn-primary w-100" onclick="simulate()">🚀 Send to Redpanda</button>
+                        </div>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="card p-4">
+                            <h5 class="mb-3">Real-Time Trace</h5>
+                            <div id="log-container">Ready for input...</div>
+                            <div id="report" class="mt-4 d-none p-3 border rounded bg-white shadow-sm">
+                                <h6 class="text-uppercase text-muted small fw-bold">Final Decision Report</h6>
+                                <div class="d-flex align-items-center mb-2">
+                                    <span class="me-2">Status:</span>
+                                    <span id="res_status" class="badge"></span>
+                                </div>
+                                <pre id="res_reason" class="bg-light p-2 rounded small mb-0"></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dashboard Tab -->
+            <div class="tab-pane fade" id="dash">
+                <div id="services-list" class="row g-3">
+                    <!-- Service cards will be injected here -->
+                </div>
+            </div>
+
+            <!-- Logs Tab -->
+            <div class="tab-pane fade" id="logs">
+                <div class="card p-0">
+                    <div class="p-2 bg-dark text-white d-flex justify-content-between align-items-center rounded-top">
+                        <span class="small ms-2">Aggregate Stream (Filtered for 'fraud-*')</span>
+                        <button class="btn btn-sm btn-outline-light py-0" onclick="document.getElementById('sys-logs').innerHTML=''">Clear</button>
+                    </div>
+                    <div id="sys-logs"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // --- Simulator Logic ---
+        async function simulate() {
+            const data = {
+                account_id: document.getElementById('acc_id').value,
+                amount_cents: parseInt(document.getElementById('amt').value),
+                merchant_id: document.getElementById('mer_id').value
+            };
+            const log = document.getElementById('log-container');
+            log.innerHTML += `<div class="log-line text-info">[${new Date().toLocaleTimeString()}] Pushing event to REDPANDA...</div>`;
+            const res = await fetch('/simulate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const { transaction_id } = await res.json();
+            log.innerHTML += `<div class="log-line text-success">[${new Date().toLocaleTimeString()}] BUS_ACK: TX_${transaction_id} queued.</div>`;
+            pollResult(transaction_id);
+        }
+
+        async function pollResult(txId) {
+            const log = document.getElementById('log-container');
+            let attempts = 0;
+            const interval = setInterval(async () => {
+                attempts++;
+                const res = await fetch(`/result/${txId}`);
+                const data = await res.json();
+                if (data.status !== "pending") {
+                    clearInterval(interval);
+                    log.innerHTML += `<div class="log-line text-warning">[${new Date().toLocaleTimeString()}] AUDIT_RECOVERY: Report retrieved from MinIO.</div>`;
+                    document.getElementById('report').classList.remove('d-none');
+                    const status = data.explanation.decision || "PROCESSED";
+                    const badge = document.getElementById('res_status');
+                    badge.innerText = status;
+                    badge.className = `badge ${status === 'BLOCK' ? 'bg-danger' : 'bg-success'}`;
+                    document.getElementById('res_reason').innerText = JSON.stringify(data.explanation, null, 2);
+                } else if (attempts >= 15) {
+                    clearInterval(interval);
+                    log.innerHTML += `<div class="log-line text-danger">[ERROR] Timed out waiting for downstream processing.</div>`;
+                }
+            }, 1500);
+        }
+
+        // --- Dashboard Logic ---
+        async function loadServices() {
+            const res = await fetch('/services');
+            const services = await res.json();
+            const container = document.getElementById('services-list');
+            container.innerHTML = services.map(s => `
+                <div class="col-md-3">
+                    <div class="card p-3 service-card ${s.ui_url ? 'border-primary' : ''}" onclick="${s.ui_url ? `window.open('${s.ui_url}', '_blank')` : ''}">
+                        <div class="d-flex justify-content-between">
+                            <span class="fw-bold small text-truncate" title="${s.name}">${s.name.replace('fraud-', '')}</span>
+                            <span class="dot ${s.status === 'running' ? 'status-up' : 'status-down'}">●</span>
+                        </div>
+                        <div class="small text-muted mt-2">Status: ${s.status}</div>
+                        ${s.ui_url ? `<div class="mt-2 text-primary x-small">🔗 Open UI</div>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // --- Log Logic ---
+        let logSource = null;
+        function startLogStream() {
+            if (logSource) return;
+            logSource = new EventSource('/logs');
+            const logContainer = document.getElementById('sys-logs');
+            logSource.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                const div = document.createElement('div');
+                div.className = `log-line ${data.is_error ? 'log-error' : ''}`;
+                div.innerHTML = `<span class="log-meta">[${data.container}]</span>${data.line}`;
+                logContainer.appendChild(div);
+                logContainer.scrollTop = logContainer.scrollHeight;
+            };
+        }
+    </script>
+</body>
+</html>

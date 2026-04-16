@@ -12,11 +12,16 @@ mgmt:
 up:
 	docker compose --profile core --profile obs --profile mgmt up -d
 
+all-up: up
+
 down:
-	docker compose down
+	docker compose --profile core --profile obs --profile mgmt down
+
+all-down:
+	docker compose --profile core --profile obs --profile mgmt down -v
 
 reset:
-	docker compose down -v
+	docker compose --profile core --profile obs --profile mgmt down -v
 
 status:
 	docker compose ps --all
@@ -48,4 +53,6 @@ sim-anomaly:
 	python tools/tx-simulator/simulate.py --mode anomaly --scenario all
 
 logs:
-	docker compose logs -f
+	docker compose --profile core --profile obs --profile mgmt logs -f
+
+all-logs: logs
