@@ -36,9 +36,18 @@ graph TD
     end
 ```
 
-## 🔄 Transaction Lifecycle Deep-Dive
+## 🧩 Roles & Responsibilities: Who does what?
 
-This diagram shows exactly what happens to a single transaction as it flows through the micro-agents.
+Understanding the difference between behavioral tracking, system monitoring, and manual judging:
+
+| Component | Responsibility | Scope | Logic Trigger |
+| :--- | :--- | :--- | :--- |
+| **✍️ Feature Writer** | **Behavioral Tracking.** Updates the history of a *specific* account (e.g., "This user has 5 txns in 1 min"). | **Individual** | Increments RocksDB counters on every event. |
+| **📈 Drift Monitor** | **System Health.** Detects if *global* spending patterns have shifted away from what the model was trained on. | **Global** | Calculates a system-wide rolling average. |
+| **🧠 Fraud Processor**| **The Decider.** Combines the user's history with the current transaction to give a 0-1 risk score. | **Transactional** | Runs ONNX inference for every event. |
+| **🕹️ Management API** | **Human-in-the-Loop.** Allows operators to manually approve `REVIEW` cases or update risk thresholds. | **Administrative** | Manual HTTP request from an operator. |
+
+## 🔄 Transaction Lifecycle Deep-Dive
 
 ```mermaid
 sequenceDiagram
@@ -88,16 +97,6 @@ sequenceDiagram
     DM->>DM: 8. Trigger: warning if avg > $100
     end
 ```
-
-### 🔍 Inside the Services
-
-| Service | 📥 Input | ⚙️ Internal Logic (Code Triggered) | 📤 Output |
-| :--- | :--- | :--- | :--- |
-| **Simulator** | CLI Flags | `generate_tx()` -> `producer.send()` | `TransactionEvent` |
-| **Feature Writer** | `TransactionEvent` | `account_tx_counts[id] += 1` (RocksDB) | `feast.push()` to Redis |
-| **Fraud Processor** | `TransactionEvent` | `champion.predict(features)` (ONNX Runtime) | `DecisionEnvelope` |
-| **Explain Consumer**| `DecisionEnvelope` | `model.explain(features)` (SHAP Math) | `.json` Audit Log in MinIO |
-| **Drift Monitor** | `TransactionEvent` | `new_avg = (total + amount) / count` | Warning Log / OTel Metric |
 
 ---
 
@@ -152,14 +151,8 @@ make schemas
 
 ### 2. Run Simulations
 Generate transactions to see the engine in action:
-- **Normal Traffic (Happy Path):**
-  ```bash
-  make sim-normal
-  ```
-- **Anomaly Traffic (Triggers Blocks/Reviews):**
-  ```bash
-  make sim-anomaly
-  ```
+- **Normal Traffic (Happy Path):** `make sim-normal`
+- **Anomaly Traffic (Triggers Blocks/Reviews):** `make sim-anomaly`
 
 ### 3. Real-Time UI Monitoring
 
@@ -168,31 +161,6 @@ Generate transactions to see the engine in action:
 | **Redpanda Console** | [http://localhost:8080](http://localhost:8080) | **View Live Transactions.** Navigate to `Topics -> decision.block` to see fraud detections in real-time. |
 | **SigNoz** | [http://localhost:3301](http://localhost:3301) | **Latency Tracing.** Search for `fraud-processor` traces to see microsecond breakdowns. |
 | **Feast UI** | [http://localhost:6566](http://localhost:6566) | **Feature State.** Monitor real-time behavioral features like `txn_count_1m`. |
-
-### 4. Example Payloads
-
-**Incoming Transaction (`tx.raw.hot`):**
-```json
-{
-  "transaction_id": "550e8400-e29b-41d4-a716-446655440000",
-  "account_id": "acc_12345",
-  "amount_cents": 50000,
-  "merchant_id": "merch_99",
-  "country_code": "US",
-  "event_timestamp": 1713110400000
-}
-```
-
-**Fraud Decision (`decision.block`):**
-```json
-{
-  "transaction_id": "550e8400-e29b-41d4-a716-446655440000",
-  "decision": "BLOCK",
-  "risk_score": 0.92,
-  "model_version": "champion-v1",
-  "flags": ["velocity_burst"]
-}
-```
 
 ## 📁 Repository Structure
 
