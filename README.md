@@ -7,7 +7,7 @@ A high-performance, sub-30ms P99 behavioral fraud detection engine built with a 
 - **Sub-30ms Latency:** Optimized hot path using Faust streaming and in-memory caching.
 - **Behavioral Analysis:** Real-time feature engineering using **Feast** (Online Store: Redis, Offline Store: MinIO).
 - **ML Inference:** sidecar model execution using **ONNX Runtime** (Champion/Challenger routing).
-- **Interactive Simulation:** [View System Flow Simulation](https://darshanmeel.github.io/fraud_detector/docs/simulation/index.html)
+- **Interactive Simulation:** [View System Flow Simulation](https://darshanmeel.github.io/fraud_detector/simulation/index.html)
 - **Observability:** Full-stack telemetry with **OpenTelemetry**, **SigNoz**, and **Prometheus**.
 - **Governance:** Immutable audit logs via MinIO WORM buckets and **Apache Iceberg**.
 - **Management API:** FastAPI for manual review overrides and dynamic risk thresholds.
